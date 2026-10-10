@@ -1,162 +1,102 @@
-# Rotom Backend - API Server
+# Rotom Backend
 
-Python-based REST API server for the Rotom Kitchen Management System.
+## 1. Scop
 
-Provides endpoints for ESP32 devices to query ingredients and recipes from MongoDB database.
+Rotom Backend este un API REST care conecteaza aplicatia cu baza de date MongoDB. Permite consultarea ingredientelor si retetelor si actualizarea stocului ingredientelor.
 
-## Overview
+API-ul este implementat in `main.py` cu FastAPI si foloseste baza de date `rotom_db`, colectiile `ingrediente` si `retete`.
 
-The backend serves as the central hub between the ESP32 embedded devices and MongoDB database:
-- Validates incoming requests against Label Base system
-- Executes database queries with filtering and sorting
-- Returns formatted JSON responses
-- Handles error cases gracefully
+## 2. Cerinte
 
-## API Endpoints
+- Python 3.9 sau mai nou
+- MongoDB instalat si pornit local, la `mongodb://localhost:27017/`
+- Pachetele Python din `requirements.txt`
 
-### GET /api/ingredients
+Baza de date trebuie sa existe si sa contina colectiile asteptate de API. Importul datelor seed se face separat.
 
-Retrieve complete list of available ingredients.
+## 3. Instalare si pornire
 
-**Response:** Array of ingredients with complete details
+Din directorul `rotom-backend`, creeaza si activeaza un mediu virtual:
 
-### GET /api/recipes?ingredients=1,2,3
-
-Query recipes containing ANY of the specified ingredients (partial match).
-
-**Parameters:**
-- `ingredients` (required): Comma-separated ingredient IDs
-
-**Response:** Array of recipes sorted alphabetically by name
-
-### GET /api/recipes/exact?ingredients=1,2,3
-
-Query recipes containing EXACTLY the specified ingredient set.
-
-**Parameters:**
-- `ingredients` (required): Comma-separated ingredient IDs
-
-**Response:** Array of recipes matching exact ingredient set (up to 10 random results)
-
-For complete API documentation and request/response examples, see ../README.md
-
-## Installation
-
-### Prerequisites
-- Python 3.8+
-- MongoDB 4.4+
-- pip package manager
-
-### Setup
-
-1. Create virtual environment:
 ```bash
-cd rotom-backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python -m venv .venv
+source .venv/bin/activate
 ```
 
-2. Install dependencies:
+In Windows PowerShell, activarea se face cu:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+Instaleaza dependentele si porneste serverul:
+
 ```bash
 pip install -r requirements.txt
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-3. Configure database connection in config.py:
-```python
-MONGODB_URI = "mongodb://localhost:27017"
-DATABASE_NAME = "rotom_db"
-API_PORT = 5000
+API-ul este disponibil la `http://localhost:8000`. Documentatia interactiva FastAPI este disponibila la `http://localhost:8000/docs`.
+
+Conexiunea MongoDB este definita direct in `main.py`. Pentru a folosi alta adresa, actualizeaza URI-ul `MongoClient`.
+
+## 4. Rute API
+
+Toate rutele sunt relative la `http://localhost:8000`. API-ul nu foloseste prefixul `/api`. Numele rutelor pentru retete pastreaza forma existenta `recipies`.
+
+### Ingrediente
+
+| Metoda si ruta | Descriere |
+|---|---|
+| `GET /ing/all` | Returneaza toate ingredientele, cu campurile disponibile. |
+| `GET /ings/unavailable` | Returneaza ingredientele cu stocul egal cu zero. |
+| `GET /ing/available` | Returneaza ingredientele cu stoc mai mare decat zero. |
+| `GET /ing/{id}` | Returneaza ingredientul cu ID-ul indicat. |
+| `PUT /modify/{id}?quantity=1` | Adauga valoarea `quantity` la stocul ingredientului. Valorile negative scad stocul; stocul nu poate deveni negativ. |
+
+Exemplu de actualizare a stocului:
+
+```text
+PUT http://localhost:8000/modify/1?quantity=2
 ```
 
-4. Start the server:
-```bash
-python main.py
+### Retete
+
+| Metoda si ruta | Descriere |
+|---|---|
+| `GET /recipies/all` | Returneaza ID-ul si numele fiecarei retete, ordonate dupa ID. |
+| `GET /recipies/{id}` | Returneaza reteta cu ID-ul indicat. |
+| `GET /recipies/ing/{ing_id}` | Returneaza retetele care contin ingredientul cu ID-ul indicat. |
+| `GET /recipies/ing_list?ids=1&ids=2` | Returneaza cel mult 10 retete aleatoare ale caror ingrediente sunt toate incluse in ID-urile trimise. |
+
+Pentru `/recipies/ing_list`, trimite fiecare ID ca parametru `ids` repetat. De exemplu:
+
+```text
+GET http://localhost:8000/recipies/ing_list?ids=1&ids=2&ids=8
 ```
 
-Server will be accessible at http://localhost:5000
+Filtrul nu cere ca reteta sa foloseasca toate ID-urile primite; cere ca reteta sa nu contina alte ingrediente in afara listei. Ingredientele retetelor sunt stocate ca ID-uri numerice in array-ul `ingredients`.
 
-## Project Structure
+## 5. Formatul raspunsurilor
 
+Raspunsurile pentru liste folosesc forma:
+
+```json
+{
+  "data": [],
+  "count": 0
+}
 ```
+
+Raspunsurile pentru o singura inregistrare folosesc un array `data` cu un element. Daca ingredientul sau reteta ceruta nu exista, API-ul intoarce un obiect cu un camp `error`.
+
+## 6. Structura proiectului
+
+```text
 rotom-backend/
-├── main.py                Main application entry point
-├── config.py              Configuration settings
-├── requirements.txt       Python dependencies
-├── models/
-│   ├── ingredient.py      Pydantic model for ingredients
-│   └── recipe.py          Pydantic model for recipes
-├── routes/
-│   ├── ingredients.py     Ingredient endpoint handlers
-│   ├── recipes.py         Recipe endpoint handlers
-│   └── __init__.py        Route initialization
-└── README.md              This file
+├── main.py
+├── requirements.txt
+└── README.md
 ```
 
-## Validation
-
-### Label Base Integration
-
-Validates ingredient tags against label_base.json from rotom-db:
-- Prevents invalid or misspelled tags
-- Ensures consistency across all recipes and ingredients
-
-### Data Validation Rules
-
-- Ingredient IDs must be numeric and exist in database
-- Recipe ingredient references must point to valid ingredients
-- Quantities must be positive numbers
-- Tags must be defined in Label Base system
-- Recipes with missing ingredients are flagged but returned
-
-## Testing
-
-### Using curl
-
-```bash
-# Get all ingredients
-curl http://localhost:5000/api/ingredients
-
-# Query recipes with ingredient 1 or 2
-curl http://localhost:5000/api/recipes?ingredients=1,2
-
-# Query recipes with exactly ingredients 1 and 2
-curl http://localhost:5000/api/recipes/exact?ingredients=1,2
-```
-
-## Performance Considerations
-
-- Endpoints optimized for ESP32 memory constraints
-- Responses limited to essential fields
-- Query results capped at 10-25 items per request
-- Connection pooling configured for efficiency
-
-## Database Integration
-
-Connects to MongoDB collections:
-- `ingrediente`: Ingredient data with stock tracking
-- `retete`: Recipe definitions with ingredient requirements
-- `label_base`: Tag definitions for validation
-
-Refer to ../rotom-db/README.md for database schema details.
-
-## Troubleshooting
-
-**MongoDB Connection Error:**
-- Verify MongoDB is running and accessible
-- Check MONGODB_URI configuration
-- Ensure firewall allows connections
-
-**Invalid Ingredient IDs:**
-- Verify ingredient exists in database
-- Check ID format (must be numeric)
-- Seed database if empty
-
-**Missing Dependencies:**
-- Run pip install -r requirements.txt
-- Ensure virtual environment is activated
-
-## Related Documentation
-
-- Main project overview: ../README.md
-- Database schemas: ../rotom-db/README.md
-- Label Base system: ../rotom-db/LABELS.md
+Schemele si datele seed pentru baza de date sunt in proiectul `rotom-db`.

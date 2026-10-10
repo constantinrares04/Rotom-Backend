@@ -49,12 +49,12 @@ def modify_quantity(id: int, quantity: float):
 
 @app.get("/recipies/all")
 def get_item():
-    all_rec = list(retete.find({},{"_id":0}).sort("id", 1))
+    all_rec = list(retete.find({}, {"_id": 0, "id": 1, "name": 1}).sort("id", 1))
     return {"data": all_rec, "count": len(all_rec)}
 
 @app.get("/recipies/ing/{ing_id}")
 def get_item(ing_id: int):
-    items = list(retete.find({"ingredients.ingredient_id": ing_id}, {"_id": 0}).sort("id", 1))
+    items = list(retete.find({"ingredients": {"$in": [ing_id]}}, {"_id": 0}).sort("id", 1))
     if items:
         return {"data": items, "count": len(items)}
     else:
@@ -62,9 +62,20 @@ def get_item(ing_id: int):
 
 @app.get("/recipies/ing_list")
 def get_recipes_by_ingredients(ids: list[int] = Query(...)):
-    query = {"ingredients": {"$not": {"$elemMatch": {"ingredient_id": {"$nin": ids}}}}}
-    recipes = list(retete.find(query, {"_id": 0}).sort("id", 1))
-    return {"data": recipes,"count": len(recipes)}
+    query = {
+        "ingredients": {"$exists": True, "$ne": []},
+        "$expr": {"$setIsSubset": ["$ingredients", ids]},
+    }
+    recipes = list(
+        retete.aggregate(
+            [
+                {"$match": query},
+                {"$sample": {"size": 10}},
+                {"$project": {"_id": 0, "id": 1, "name": 1}},
+            ]
+        )
+    )
+    return {"data": recipes, "count": len(recipes)}
 
 @app.get("/recipies/{id}")
 def get_item(id: int):
