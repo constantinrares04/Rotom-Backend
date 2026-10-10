@@ -3,8 +3,8 @@ from pymongo import MongoClient # pyright: ignore[reportMissingImports]
 
 client = MongoClient("mongodb://localhost:27017/")
 db = client["rotom_db"]
-retete = db["recipies"]
-ingrediente = db["ingredients"]
+retete = db["retete"]
+ingrediente = db["ingrediente"]
 app = FastAPI()
 
 @app.get("/")
@@ -34,16 +34,16 @@ def get_item(id: int):
     else:
         return {"error": "Ingredient not found"}
     
-@app.get("/modify/{id}")
-def modify_quantity(id: int, qnt: float):
-    item = ingrediente.find_one({"id": id}, {"_id":0,"unit":0,"tags":0,"priority":0 })
+@app.put("/modify/{id}")
+def modify_quantity(id: int, quantity: float):
+    item = ingrediente.find_one({"id": id}, {"_id": 0, "unit": 0, "tags": 0, "priority": 0})
     if item:
-        new_quantity = item["quantity"] + qnt
+        new_quantity = item["quantity"] + quantity
         if new_quantity < 0:
             return {"error": "Insufficient quantity"}
 
         ingrediente.update_one({"id": id}, {"$set": {"quantity": new_quantity}})
-        return {"message": "Quantity updated successfully"}
+        return {"message": "Quantity updated successfully", "new_quantity": new_quantity}
     else:
         return {"error": "Ingredient not found"}
 
